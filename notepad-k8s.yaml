@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: notepad
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: notepad
+    template:
+        metadata:
+            labels:
+                app: notepad
+        spec:
+            containers:
+                - image: gofrendi/notepad
+                  name: notepad
+                  env:
+                      - name: HTTP_PORT
+                        value: "3000"
+                      - name: REDIS_PORT
+                        value: "6379"
+                      - name: REDIS_HOST
+                        value: "redis"
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+    name: notepad
+    labels:
+        app: notepad
+    annotations:
+        dev.okteto.com/auto-ingress: "true"
+spec:
+    type: ClusterIP    
+    ports:
+        - name: notepad
+          port: 3000
+          targetPort: 3000
+    selector:
+        app: notepad

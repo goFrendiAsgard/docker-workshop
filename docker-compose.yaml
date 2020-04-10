@@ -1,0 +1,18 @@
+version: '2.0'
+services:
+
+  web:
+    build: ./app
+    ports:
+        - "8080:3000"
+    environment:
+        - HTTP_PORT=3000
+        - REDIS_PORT=6379
+        - REDIS_HOST=redis
+    depends_on:
+        - redis
+
+  redis:
+    image: redis
+    ports:
+        - "6379:6379"
