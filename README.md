@@ -285,3 +285,97 @@ kubectl apply -f redis-k8s.yaml
 kubectl apply -f notepad-k8s.yaml
 ```
 
+Mari kita bahas sedikit tentang apa yang terjadi di sini.
+
+Kubernetes sebenarnya bisa diakses melalui HTTP API, namun biasanya para developer lebih suka menggunakan program `kubectl` supaya bisa melakukan deployment dari terminal/console.
+
+Dalam prakteknya, banyak perusahaan yang sudah memanfaatkan pipeline CI/CD (Continuous Integration/Continuous Deployment). Dengan adanya CI/CD ini, developer bisa melakukan deployment secara otomatis, bergantung pada aksi yang didefinisikan. Misalnya, seteiap kali merge ke branch master, atau setiap kali ada penambahan tag tertentu pada sebuat commit.
+
+Pada kesempatan ini, kita tidak akan membahas CI/CD, kita hanya akan fokus pada deployment saja.
+
+## Autentikasi
+
+Biasanya penyedia layanan kubernetes (GCP/AWS/Azure/Octeto/Digital Ocean, dsb) menyediakan file autentikasi yang perlu kita download di komputer lokal. `kubectl` mengenal file autentikasi ini berdasarkan environment variable `KUBECONFIG`.
+
+Inilah yang kita lakukan di baris pertama:
+
+```sh
+export KUBECONFIG=./okteto-kube.config
+```
+
+## Get All
+
+Perintah `kubectl get all` biasa dipakai untuk melihat resource apa saja yang sudah ter-deploy ke cloud. Biasanya, kita juga menggunakan perintah ini untuk memastikan apakah `kubectl` di komputer kita sudah terhubung ke cloud.
+
+## Apply
+
+Perintah `kubectl apply` berguna untuk men-deploy deployment/service dan artifact lain ke cloud.
+
+## Sedikit lebih dalam
+
+Nah, mungkin muncul pertanyaan baru, apa itu `deployment`, dan apa itu `service`?
+
+Sebenarnya di balik layar, kubernetes meng-orchestrate beberapa VM/komputer. VM/komputer ini kita kenal dengan sebutan `node`. Saat kita men-deploy sesuatu, maka kubernetes akan meletakkannya pada node-node yang masih memiliki kapasitas.
+
+Dalam satu node, bisa terdapat banyak `pod`. Satu pod umumnya berisi satu `docker-container` (bisa lebih).
+
+Sekarang bayangkan situs berita semacam kumparan, detik, atau tirto. Menurut kalian, situs-situs tersebut lebih sering dipakai untuk membaca berita, atau menulis berita?
+
+Tentu saja, lebih banyak dipakai untuk membaca berita. Dalam hal ini kita bisa asumsikan bahwa `pod` untuk membaca data dan menampilkan ke user harus lebih banyak daripada `pod` untuk menuliskan berita (yang biasanya dipakai jurnalis).
+
+Nah, supaya pod-pod tadi bisa berkoordinasi satu sama lain, dibutuhkan semacam gateway/load-balancer yang bertugas membagi beban kerja pod. Untuk itu, pod-pod tadi perlu dibungkus dalam satu `service`.
+
+Pada contoh situs berita kita tadi, mungkin kita hanya memiliki 2 service saja, `writer` dan `reader`. Namun masing-masing `service` membungkus beberapa `pod`. Katakan saja, service `writer` membungkus 10 pod, sedangkan service `reader` membungkus 2 pod.
+
+Mari kita lihat contoh `deployment` dan `service`.
+
+### Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: notepad
+spec:
+    replicas: 1 # di sini, kita hanya akan punya satu pod. Pada kenyataannya bisa dibuat auto-scale
+    selector:
+        matchLabels:
+            app: notepad
+    template:
+        metadata:
+            labels:
+                app: notepad
+        spec:
+            containers: # sebenarnya bisa ada banyak container, tapi umumnya satu
+                - image: gofrendi/notepad # nama docker image yang kita pakai
+                  name: notepad # nama container
+                  env: # environment variable
+                      - name: HTTP_PORT
+                        value: "3000"
+                      - name: REDIS_PORT
+                        value: "6379"
+                      - name: REDIS_HOST
+                        value: "redis" # ini me-refer ke service "redis"
+```
+
+### Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+    name: notepad
+    labels:
+        app: notepad
+    annotations:
+        dev.okteto.com/auto-ingress: "true" # Ini supaya bisa diakses dari luar
+spec:
+    type: ClusterIP    
+    ports: # daftar port yang akan kita forward ke pod.
+        - name: notepad
+          port: 3000
+          targetPort: 3000
+    selector:
+        app: notepad
+```
+
